@@ -21,8 +21,9 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 
-const API_URL = "http://localhost:5000/api/advertisements"; // change to your backend URL
-const FILE_BASE = "http://localhost:5000";
+const SERVER = "http://localhost:5000";
+const API_URL = `${SERVER}/ads`; // matches app.use("/ads", advRoute) in server.js
+const FILE_BASE = SERVER; // server serves /uploads statically
 const MAX_FILES = 10;
 const MAX_SIZE_MB = 5;
 
@@ -36,10 +37,12 @@ const isValidLink = (value) => {
 };
 
 // One posted advertisement
-function AdCard({ ad, index, total, onToggle, onSaveLink, onMove, onDelete, showOwner }) {
+function AdCard({ ad, index, total, onToggle, onSave, onMove, onDelete, showOwner }) {
   const [link, setLink] = useState(ad.linkUrl || "");
+  const [description, setDescription] = useState(ad.description || "");
   const linkInvalid = !isValidLink(link);
-  const changed = link.trim() !== (ad.linkUrl || "");
+  const changed =
+    link.trim() !== (ad.linkUrl || "") || description.trim() !== (ad.description || "");
 
   return (
     <Card sx={{ display: "flex", flexDirection: "column", opacity: ad.isActive ? 1 : 0.6 }}>
@@ -64,9 +67,21 @@ function AdCard({ ad, index, total, onToggle, onSaveLink, onMove, onDelete, show
           error={linkInvalid}
           helperText={linkInvalid ? "Enter a valid http/https URL" : ""}
         />
+        <TextField
+          size="small"
+          multiline
+          minRows={2}
+          label="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
         {changed && !linkInvalid && (
-          <Button size="small" variant="outlined" onClick={() => onSaveLink(ad.id, link.trim())}>
-            Save link
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => onSave(ad.id, { linkUrl: link.trim(), description: description.trim() })}
+          >
+            Save changes
           </Button>
         )}
 
@@ -107,7 +122,7 @@ export default function Advertisement() {
   const fileInputRef = useRef(null);
   const itemsRef = useRef([]); // latest items, used to free preview URLs on unmount
 
-  const [items, setItems] = useState([]); // new uploads: { key, file, preview, link }
+  const [items, setItems] = useState([]); // new uploads: { key, file, preview, link, description }
   const [ads, setAds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -163,6 +178,7 @@ export default function Advertisement() {
         file: f,
         preview: URL.createObjectURL(f),
         link: "",
+        description: "",
       });
     }
 
@@ -170,8 +186,8 @@ export default function Advertisement() {
     e.target.value = "";
   };
 
-  const setItemLink = (key, link) =>
-    setItems((prev) => prev.map((i) => (i.key === key ? { ...i, link } : i)));
+  const setItemField = (key, field, value) =>
+    setItems((prev) => prev.map((i) => (i.key === key ? { ...i, [field]: value } : i)));
 
   const removeItem = (key) => {
     const target = items.find((i) => i.key === key);
@@ -200,6 +216,7 @@ export default function Advertisement() {
     const formData = new FormData();
     items.forEach((i) => formData.append("images", i.file));
     formData.append("links", JSON.stringify(items.map((i) => i.link.trim())));
+    formData.append("descriptions", JSON.stringify(items.map((i) => i.description.trim())));
 
     try {
       setSubmitting(true);
@@ -238,10 +255,14 @@ export default function Advertisement() {
     }
   };
 
-  const handleSaveLink = async (id, linkUrl) => {
+  const handleSave = async (id, { linkUrl, description }) => {
     try {
-      await patch(`${API_URL}/${id}`, { linkUrl });
-      setAds((prev) => prev.map((a) => (a.id === id ? { ...a, linkUrl: linkUrl || null } : a)));
+      await patch(`${API_URL}/${id}`, { linkUrl, description });
+      setAds((prev) =>
+        prev.map((a) =>
+          a.id === id ? { ...a, linkUrl: linkUrl || null, description: description || null } : a
+        )
+      );
     } catch (err) {
       setError(err.message);
     }
@@ -317,8 +338,11 @@ export default function Advertisement() {
             }}
           >
             {items.map((item) => (
-              <Box key={item.key} sx={{ border: "1px solid #ddd", borderRadius: 1, p: 1 }}>
-                <Box sx={{ position: "relative", height: 130, mb: 1 }}>
+              <Box
+                key={item.key}
+                sx={{ border: "1px solid #ddd", borderRadius: 1, p: 1, display: "flex", flexDirection: "column", gap: 1 }}
+              >
+                <Box sx={{ position: "relative", height: 130 }}>
                   <Box
                     component="img"
                     src={item.preview}
@@ -347,9 +371,19 @@ export default function Advertisement() {
                   label="Link (optional)"
                   placeholder="https://..."
                   value={item.link}
-                  onChange={(e) => setItemLink(item.key, e.target.value)}
+                  onChange={(e) => setItemField(item.key, "link", e.target.value)}
                   error={!isValidLink(item.link)}
                   helperText={!isValidLink(item.link) ? "Enter a valid http/https URL" : ""}
+                />
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  label="Description (optional)"
+                  placeholder="Brief description of this advertisement..."
+                  value={item.description}
+                  onChange={(e) => setItemField(item.key, "description", e.target.value)}
                 />
               </Box>
             ))}
@@ -393,7 +427,7 @@ export default function Advertisement() {
               total={ads.length}
               showOwner={role === "admin"}
               onToggle={handleToggle}
-              onSaveLink={handleSaveLink}
+              onSave={handleSave}
               onMove={handleMove}
               onDelete={handleDelete}
             />

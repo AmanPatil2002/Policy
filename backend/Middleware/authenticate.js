@@ -1,39 +1,34 @@
 const jwt = require("jsonwebtoken");
 const db = require("../config/db").promise();
 
-// Verifies JWT and confirms the user still exists and is active
 exports.authenticate = async (req, res, next) => {
   try {
-    const header = req.headers.authorization;
-    if (!header || !header.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Authentication token missing" });
-    }
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    if (!token) return res.status(401).json({ message: "Not authenticated" });
 
-    const token = header.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
 
+    // re-check the DB so disabled users are cut off immediately
     const [rows] = await db.query(
       "SELECT id, email, role, is_active FROM users WHERE id = ?",
-      [decoded.id]
+      [payload.id]
     );
     const user = rows[0];
     if (!user || !user.is_active) {
-      return res.status(401).json({ message: "User not found or disabled" });
+      return res.status(401).json({ message: "Account unavailable" });
     }
 
     req.user = { id: user.id, email: user.email, role: user.role };
     next();
-  } catch (err) {
-    const message =
-      err.name === "TokenExpiredError" ? "Token expired" : "Invalid token";
-    return res.status(401).json({ message });
+  } catch {
+    res.status(401).json({ message: "Invalid or expired token" });
   }
 };
 
-// Role guard: authorize("admin") or authorize("admin", "host")
-exports.authorize = (...roles) => (req, res, next) => {
+exports.requireRole = (...roles) => (req, res, next) => {
   if (!req.user || !roles.includes(req.user.role)) {
-    return res.status(403).json({ message: "Access denied" });
+    return res.status(403).json({ message: "Forbidden" });
   }
   next();
 };

@@ -1,20 +1,19 @@
-const express = require("express");
-const router = express.Router();
-const {
-  login,
-  createHost,
-  getHosts,
-  setHostStatus,
-  me,
-} = require("../Controller/authController");
-const { authenticate, authorize } = require("../Middleware/authenticate");
+const router = require("express").Router();
+const auth = require("../Controller/authController");
+const { authenticate, requireRole } = require("../Middleware/authenticate");
 
-router.post("/login", login);
-router.get("/me", authenticate, me);
+// public
+router.post("/login", auth.login);
 
-// Admin only
-router.post("/hosts", authenticate, authorize("admin"), createHost);
-router.get("/hosts", authenticate, authorize("admin"), getHosts);
-router.patch("/hosts/:id/status", authenticate, authorize("admin"), setHostStatus);
+// any logged-in user
+router.get("/me", authenticate, auth.me);
+
+// admin only - host management
+router.post("/hosts", authenticate, requireRole("admin"), auth.createHost);
+router.get("/hosts", authenticate, requireRole("admin"), auth.getHosts);
+router.get("/hosts/:id", authenticate, requireRole("admin"), auth.getHostById);
+router.put("/hosts/:id", authenticate, requireRole("admin"), auth.updateHost);
+router.patch("/hosts/:id/status", authenticate, requireRole("admin"), auth.setHostStatus);
+router.delete("/hosts/:id", authenticate, requireRole("admin"), auth.deleteHost);
 
 module.exports = router;

@@ -1,9 +1,18 @@
-import { Outlet, Navigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 
-const ProtectedRoutes = () => {
-  
+const ProtectedRoute = ({ children, requireAdmin = false }) => {
   const token = localStorage.getItem("token");
-  return token ? <Outlet /> : <Navigate to="/" />
+  const role = localStorage.getItem("role");
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (requireAdmin && role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
 };
 
-export default ProtectedRoutes;
+export default ProtectedRoute;

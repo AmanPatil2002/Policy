@@ -1,37 +1,53 @@
-// CREATE TABLE submissions (
-//   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-//   form_link_id  BIGINT UNSIGNED NOT NULL,
-//   owner_id      BIGINT UNSIGNED NOT NULL,
-//   client_name   VARCHAR(190) NULL,
-//   client_email  VARCHAR(190) NULL,
-//   client_phone  VARCHAR(40)  NULL,
-//   data          JSON NOT NULL,
-//   ip_address    VARBINARY(16) NULL,                    
-//   user_agent    VARCHAR(300) NULL,
-//   submitted_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-//   PRIMARY KEY (id),
-//   UNIQUE KEY uq_submissions_link (form_link_id),
-//   KEY idx_submissions_owner (owner_id, submitted_at),
-//   KEY idx_submissions_submitted (submitted_at),
-//   KEY idx_submissions_phone (client_phone),
-//   KEY idx_submissions_email (client_email),
-//   CONSTRAINT chk_submissions_data CHECK (JSON_VALID(data)),
-//   CONSTRAINT fk_submissions_link
-//     FOREIGN KEY (form_link_id) REFERENCES form_links(id)
-//     ON DELETE RESTRICT,
-//   CONSTRAINT fk_submissions_owner
-//     FOREIGN KEY (owner_id) REFERENCES users(id)
-//     ON DELETE RESTRICT
-// );
-
 const db = require("../config/db");
 
-const postForm = (req, res) => {
+const postForm = async (req, res) => {
+  try {
+    const {
+      form_link_id,
+      owner_id,
+      client_name,
+      client_email,
+      client_phone,
+      data,
+      ip_address = req.ip,
+      user_agent = req.get('User-Agent'),
+    } = req.body;
 
-  
+    if (!form_link_id || !owner_id || !data) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const submission = await createSubmission(
+      form_link_id,
+      owner_id,
+      client_name,
+      client_email,
+      client_phone,
+      data,
+      ip_address,
+      user_agent
+    );
+
+    res.status(201).json({ message: "Submission created", submission });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to create submission" });
+  }
+};
+
+const createSubmission = async (form_link_id, owner_id, client_name, client_email, client_phone, data, ip_address, user_agent) => {
+  try {
+    const [result] = await db.query(
+      "INSERT INTO submissions (form_link_id, owner_id, client_name, client_email, client_phone, data, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [form_link_id, owner_id, client_name, client_email, client_phone, JSON.stringify(data), ip_address, user_agent]
+    );
+    return { id: result.insertId, form_link_id, owner_id, client_name, client_email, client_phone, data, ip_address, user_agent };
+  } catch (err) {
+    console.error("Error creating submission:", err);
+    throw err;
+  }
 };
 
 module.exports = {
   postForm,
-  
 };

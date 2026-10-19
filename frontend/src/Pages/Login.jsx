@@ -1,19 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import {
+  Alert,
   Box,
   Button,
   Card,
   CardContent,
   Container,
   CssBaseline,
+  IconButton,
+  InputAdornment,
   Link,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -36,12 +41,22 @@ function Login() {
 
   const [form, setForm] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({});
+  const [serverError, setServerError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // already logged in -> go straight to the panel
+  useEffect(() => {
+    if (localStorage.getItem("token") && localStorage.getItem("role")) {
+      navigate("/admin/dashboard", { replace: true });
+    }
+  }, [navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
     setErrors((prev) => ({ ...prev, [name]: "" }));
+    setServerError("");
   };
 
   const validate = () => {
@@ -53,10 +68,9 @@ function Login() {
       newErrors.email = "Enter a valid email";
     }
 
+    // only check it's filled in; the server decides if it's correct
     if (!form.password) {
       newErrors.password = "Password is required";
-    } else if (form.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
     }
 
     setErrors(newErrors);
@@ -68,6 +82,7 @@ function Login() {
     if (!validate()) return;
 
     setLoading(true);
+    setServerError("");
     try {
       const { data } = await axios.post(`${API_URL}/auth/login`, {
         email: form.email.trim(),
@@ -76,14 +91,19 @@ function Login() {
 
       const { token, user } = data;
 
+      // keys must match what Admin.jsx reads and clears on logout
       localStorage.setItem("token", token);
-      localStorage.setItem("email", user.email);
       localStorage.setItem("role", user.role);
-      localStorage.setItem("id", user.id); 
+      localStorage.setItem("username", user.email);
+      localStorage.setItem("Id", user.id);
 
-      navigate(user.role === "admin" ? "/admin" : "/");
+      // admin and host both use the /admin shell; Admin.jsx shows
+      // the right menu and title for each role
+      navigate("/admin/dashboard", { replace: true });
     } catch (err) {
-      alert(err.response?.data?.message || "Login failed. Please try again.");
+      setServerError(
+        err.response?.data?.message || "Login failed. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -111,12 +131,14 @@ function Login() {
                   Sign In
                 </Typography>
                 <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-                  Sign in to your account
+                  Admin and host login
                 </Typography>
               </Box>
 
               <form onSubmit={handleSubmit} noValidate>
                 <Stack spacing={2.5}>
+                  {serverError && <Alert severity="error">{serverError}</Alert>}
+
                   <TextField
                     label="Email"
                     name="email"
@@ -127,13 +149,14 @@ function Login() {
                     error={Boolean(errors.email)}
                     helperText={errors.email}
                     autoComplete="email"
+                    autoFocus
                     fullWidth
                   />
 
                   <TextField
                     label="Password"
                     name="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={form.password}
                     onChange={handleChange}
                     placeholder="Enter password"
@@ -141,6 +164,19 @@ function Login() {
                     helperText={errors.password}
                     autoComplete="current-password"
                     fullWidth
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label="toggle password visibility"
+                            onClick={() => setShowPassword((s) => !s)}
+                            edge="end"
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
                   />
 
                   <Button
@@ -160,8 +196,8 @@ function Login() {
                 color="text.secondary"
                 sx={{ mt: 3, textAlign: "center" }}
               >
-                <Link component={RouterLink} to="/" fontWeight={600}>
-                  Back
+                <Link component={RouterLink} to="/form" fontWeight={600}>
+                  Back to Form
                 </Link>
               </Typography>
             </CardContent>
